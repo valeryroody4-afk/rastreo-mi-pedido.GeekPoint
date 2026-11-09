@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rastreo mi pedido_GeekPoint</title>
+<style>
+:root{--bg:#f4f1fb;--card:#fff;--tx:#1b1530;--mut:#6b6485;--pr:#7c3aed;--ok:#16a34a;--line:#d9d3ea;--ac:#f59e0b;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#120e22;--card:#1c1633;--tx:#f1edfb;--mut:#a69fc2;--pr:#a78bfa;--ok:#4ade80;--line:#3a3158;--ac:#fbbf24}}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#120e22;--card:#1c1633;--tx:#f1edfb;--mut:#a69fc2;--pr:#a78bfa;--ok:#4ade80;--line:#3a3158;--ac:#fbbf24}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--pr);color:#fff}
+header b{font-size:22px;letter-spacing:2px}
+header span{font-size:13px;opacity:.9}
+main{max-width:860px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:var(--mut);font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+.stat{background:var(--bg);border-radius:10px;padding:10px;text-align:center}
+.stat b{display:block;font-size:20px;color:var(--pr)}
+.stat small{color:var(--mut)}
+.bar{height:8px;background:var(--line);border-radius:6px;margin-top:14px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .2s}
+.map{overflow-x:auto}
+svg{width:100%;min-width:560px;height:auto;display:block}
+.lbl{font-size:12px;fill:var(--tx);font-weight:600}
+.lbl2{font-size:11px;fill:var(--mut)}
+.dot{fill:var(--card);stroke:var(--line);stroke-width:4}
+.dot.on{fill:var(--ok);stroke:var(--ok)}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--pr);color:#fff;font-weight:600}
+button.g{background:var(--bg);color:var(--tx);border:1px solid var(--line)}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
+li:last-child{border:0}
+li time{color:var(--mut);font-size:13px;min-width:64px}
+li.new{animation:in .5s}
+@keyframes in{from{opacity:0;transform:translateY(-6px)}}
+.done{display:none;background:var(--ok);color:#fff;border-radius:12px;padding:12px;margin-top:12px;font-weight:600;text-align:center}
+.empty{color:var(--mut);font-size:14px}
+</style>
+</head>
+<body>
+<header><b>GEEKPOINT</b><span>Rastreo de pedidos</span></header>
+<main>
+<section class="card">
+  <h1 id="status">Pedido confirmado</h1>
+  <div class="sub">Pedido #GP-48213 · Figura coleccionable + 2 cómics · Entrega a: Tijuana, B.C.</div>
+  <div class="stats">
+    <div class="stat"><b id="km">18.4 km</b><small>Distancia a ti</small></div>
+    <div class="stat"><b id="eta">35 min</b><small>Llegada estimada</small></div>
+    <div class="stat"><b id="pct">0%</b><small>Recorrido</small></div>
+  </div>
+  <div class="bar"><i id="fill"></i></div>
+  <div class="done" id="done">¡Tu pedido fue entregado! Registro guardado en tu historial.</div>
+</section>
+
+<section class="card map">
+<svg viewBox="0 0 800 300" role="img" aria-label="Ruta del pedido">
+  <path id="route" d="M60 230 C 180 60, 280 60, 360 150 S 560 270, 740 70" fill="none" stroke="var(--line)" stroke-width="8" stroke-linecap="round" stroke-dasharray="2 14"/>
+  <path id="done-route" d="M60 230 C 180 60, 280 60, 360 150 S 560 270, 740 70" fill="none" stroke="var(--ok)" stroke-width="8" stroke-linecap="round"/>
+  <g id="pts"></g>
+  <g id="cart"><circle r="22" fill="var(--ac)"/><text text-anchor="middle" dy="8" font-size="24">🛒</text></g>
+</svg>
+</section>
+
+
+<section class="card">
+  <h1 style="font-size:17px">Registro del pedido</h1>
+  <ul id="log"><li class="empty">Aún no hay movimientos.</li></ul>
+</section>
+</main>
+<script>
+const CP=[
+{f:0,n:"Pedido confirmado",d:"Tienda GEEKPOINT",s:"Pedido confirmado"},
+{f:.15,n:"Salió de GEEKPOINT",d:"Tu paquete va en camino",s:"Salió de la tienda"},
+{f:.5,n:"A mitad de camino",d:"Centro de distribución",s:"A mitad de camino"},
+{f:.85,n:"Cerca de ti",d:"El repartidor está en tu zona",s:"Muy cerca de ti"},
+{f:1,n:"Entregado",d:"Entregado en tu destino",s:"Entregado"}];
+const KM=18.4,MIN=35,DUR=20000;
+const $=id=>document.getElementById(id);
+const route=$("route"),L=route.getTotalLength(),cart=$("cart"),pts=$("pts");
+let p=0,run=false,t0=0,base=0,reached=0;
+const ns="http://www.w3.org/2000/svg";
+CP.forEach((c,i)=>{const q=route.getPointAtLength(c.f*L);const g=document.createElementNS(ns,"g");
+const up=i%2===0?-34:44;
+g.innerHTML=`<circle class="dot" id="d${i}" cx="${q.x}" cy="${q.y}" r="9"/><text class="lbl" x="${q.x}" y="${q.y+up}" text-anchor="middle">${c.n}</text>`;pts.appendChild(g)});
+function fmt(){return new Date().toLocaleTimeString("es-MX",{hour:"2-digit",minute:"2-digit"})}
+function addLog(c){const ul=$("log");if(ul.querySelector(".empty"))ul.innerHTML="";
+const li=document.createElement("li");li.className="new";li.innerHTML=`<time>${fmt()}</time><div><b>${c.n}</b><br><span class="sub">${c.d}</span></div>`;ul.prepend(li)}
+function render(){
+const q=route.getPointAtLength(p*L);cart.setAttribute("transform",`translate(${q.x},${q.y})`);
+$("done-route").style.strokeDasharray=L;$("done-route").style.strokeDashoffset=L*(1-p);
+$("fill").style.width=p*100+"%";$("pct").textContent=Math.round(p*100)+"%";
+$("km").textContent=(KM*(1-p)).toFixed(1)+" km";
+const m=Math.ceil(MIN*(1-p));$("eta").textContent=m>0?m+" min":"¡Ya llegó!";
+while(reached<CP.length&&p>=CP[reached].f){$("d"+reached).classList.add("on");addLog(CP[reached]);$("status").textContent=CP[reached].s;reached++}
+if(p>=1){$("done").style.display="block";save()}
+}
+function save(){try{localStorage.setItem("gp-48213","Entregado "+new Date().toISOString())}catch(e){}}
+function tick(now){if(!run)return;p=Math.min(1,base+(now-t0)/DUR);render();if(p<1)requestAnimationFrame(tick);else run=false}
+run=true;t0=performance.now();base=0;requestAnimationFrame(tick);
+</script>
+</body>
+</html>
